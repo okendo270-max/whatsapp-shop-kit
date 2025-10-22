@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Create a single-page invoice PDF and return blob URL
+// Create a single-page invoice PDF and return data URL
 // signature: makeInvoicePdf(data, profile)
 // profile: { sellerName, sellerPhone, paymentLink, logoDataUrl }
 export function makeInvoicePdf(data, profile = {}) {
@@ -12,12 +12,24 @@ export function makeInvoicePdf(data, profile = {}) {
   // Add logo if present (try-catch in case of invalid image)
   try {
     if (profile.logoDataUrl) {
-      // fit logo into 80x80 box
+      // try to add image (png/jpeg dataURL)
       doc.addImage(profile.logoDataUrl, 'PNG', left, top, 80, 80);
+    } else {
+      // draw a simple placeholder "box" and initials if no logoDataUrl
+      doc.setFillColor(245, 245, 250);
+      doc.roundedRect(left, top, 80, 80, 6, 6, 'F');
+      doc.setFontSize(18);
+      doc.setTextColor(90, 90, 95);
+      const initials = (profile.sellerName || '').split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase() || 'SS';
+      // center initials
+      const textWidth = doc.getTextWidth(initials);
+      doc.text(initials, left + 40 - textWidth/2, top + 48);
     }
   } catch (e) {
     // silent fallback
     console.warn('Could not add logo to PDF', e);
+    doc.setFontSize(12);
+    doc.text(profile.sellerName || 'Seller', left, top + 20);
   }
 
   // Seller name to right of logo (or left if no logo)
@@ -60,8 +72,7 @@ export function makeInvoicePdf(data, profile = {}) {
     doc.text(`Payment: ${profile.paymentLink}`, 40, finalY + 52);
   }
 
-  const pdfBlob = doc.output('blob');
-  return URL.createObjectURL(pdfBlob);
+  return doc.output('dataurlstring');
 }
 
 function computeTotal(items){
