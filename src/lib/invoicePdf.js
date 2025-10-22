@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Create a single-page invoice PDF and return data URL
+// Create a single-page invoice PDF and return blob URL
 // signature: makeInvoicePdf(data, profile)
 // profile: { sellerName, sellerPhone, paymentLink, logoDataUrl }
 export function makeInvoicePdf(data, profile = {}) {
@@ -72,7 +72,8 @@ export function makeInvoicePdf(data, profile = {}) {
     doc.text(`Payment: ${profile.paymentLink}`, 40, finalY + 52);
   }
 
-  return doc.output('dataurlstring');
+  const pdfBlob = doc.output('blob');
+  return URL.createObjectURL(pdfBlob);
 }
 
 function computeTotal(items){

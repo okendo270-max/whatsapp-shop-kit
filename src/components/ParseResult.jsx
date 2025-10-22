@@ -28,8 +28,17 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
   }
 
   function handleGenerate(){
-    const url = makeInvoicePdf(invoice, profile);
-    window.open(url, '_blank');
+    try {
+      const url = makeInvoicePdf(invoice, profile);
+      const newWindow = window.open(url, '_blank');
+      if (!newWindow) {
+        alert('Please allow popups to view the PDF');
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      alert('Error generating PDF. Check console for details.');
+    }
   }
 
   function handleSave(){
