@@ -2,27 +2,63 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // Create a single-page invoice PDF and return blob URL
-export function makeInvoicePdf(data) {
+// signature: makeInvoicePdf(data, profile)
+// profile: { sellerName, sellerPhone, paymentLink, logoDataUrl }
+export function makeInvoicePdf(data, profile = {}) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  doc.setFontSize(12);
-  doc.text(`Invoice #${data.id}`, 40, 50);
-  doc.setFontSize(10);
-  doc.text(`Date: ${data.date}`, 40, 70);
-  doc.text(`Buyer: ${data.buyerName}`, 40, 90);
-  if (data.phone) doc.text(`Phone: ${data.phone}`, 40, 105);
+  const left = 40;
+  const top = 40;
 
+  // Add logo if present (try-catch in case of invalid image)
+  try {
+    if (profile.logoDataUrl) {
+      // fit logo into 80x80 box
+      doc.addImage(profile.logoDataUrl, 'PNG', left, top, 80, 80);
+    }
+  } catch (e) {
+    // silent fallback
+    console.warn('Could not add logo to PDF', e);
+  }
+
+  // Seller name to right of logo (or left if no logo)
+  const sellerX = profile.logoDataUrl ? left + 90 : left;
+  doc.setFontSize(14);
+  if (profile.sellerName) {
+    doc.text(`${profile.sellerName}`, sellerX, top + 20);
+  } else {
+    doc.text('Seller', sellerX, top + 20);
+  }
+  doc.setFontSize(10);
+  if (profile.sellerPhone) doc.text(`Phone: ${profile.sellerPhone}`, sellerX, top + 38);
+  if (profile.paymentLink) doc.text(`Pay: ${profile.paymentLink}`, sellerX, top + 56);
+
+  // Invoice header info
+  doc.setFontSize(12);
+  doc.text(`Invoice #${data.id}`, 40, top + 110);
+  doc.setFontSize(10);
+  doc.text(`Date: ${data.date}`, 40, top + 128);
+  doc.text(`Buyer: ${data.buyerName}`, 40, top + 144);
+  if (data.phone) doc.text(`Phone: ${data.phone}`, 40, top + 160);
+
+  // Table of items
   const body = data.items.map(i => [i.name, String(i.qty), i.unitPrice, formatLineTotal(i)]);
   doc.autoTable({
     head: [['Item', 'Qty', 'Unit', 'Line total']],
     body,
-    startY: 130,
+    startY: top + 180,
     margin: {left:40, right:40}
   });
 
-  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 200;
+  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : top + 220;
   const total = computeTotal(data.items);
   doc.setFontSize(12);
   doc.text(`Total: ${total}`, 40, finalY + 30);
+
+  // footer: small seller payment link if present
+  if (profile.paymentLink) {
+    doc.setFontSize(9);
+    doc.text(`Payment: ${profile.paymentLink}`, 40, finalY + 52);
+  }
 
   const pdfBlob = doc.output('blob');
   return URL.createObjectURL(pdfBlob);
@@ -35,7 +71,6 @@ function computeTotal(items){
     const q = Number(i.qty) || 0;
     total += p * q;
   });
-  // format with two decimals
   return total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2});
 }
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { makeInvoicePdf } from '../lib/invoicePdf';
 
-export default function ParseResult({ parsed, onSave }){
+export default function ParseResult({ parsed, onSave, profile = {} }){
   const [invoice, setInvoice] = useState(parsed);
 
   function updateField(path, value){
@@ -15,7 +15,7 @@ export default function ParseResult({ parsed, onSave }){
 
   function handleGenerate(){
     try {
-      const url = makeInvoicePdf(invoice);
+      const url = makeInvoicePdf(invoice, profile);
       const newWindow = window.open(url, '_blank');
       if (!newWindow) {
         alert('Please allow popups to view the PDF');
