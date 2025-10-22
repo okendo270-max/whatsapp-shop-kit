@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Create a single-page invoice PDF and return data URL
+// Create a single-page invoice PDF and return blob URL
 export function makeInvoicePdf(data) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   doc.setFontSize(12);
@@ -24,7 +24,8 @@ export function makeInvoicePdf(data) {
   doc.setFontSize(12);
   doc.text(`Total: ${total}`, 40, finalY + 30);
 
-  return doc.output('dataurlstring');
+  const pdfBlob = doc.output('blob');
+  return URL.createObjectURL(pdfBlob);
 }
 
 function computeTotal(items){

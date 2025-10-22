@@ -14,9 +14,17 @@ export default function ParseResult({ parsed, onSave }){
   }
 
   function handleGenerate(){
-    // produce dataurl and open
-    const url = makeInvoicePdf(invoice);
-    window.open(url, '_blank');
+    try {
+      const url = makeInvoicePdf(invoice);
+      const newWindow = window.open(url, '_blank');
+      if (!newWindow) {
+        alert('Please allow popups to view the PDF');
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      alert('Error generating PDF. Check console for details.');
+    }
   }
 
   function handleSave(){
