@@ -5,6 +5,7 @@ import InvoiceList from './components/InvoiceList';
 import Settings from './components/Settings';
 import Templates from './components/Templates';
 import Onboarding from './components/Onboarding';
+import CreditsButton from './components/CreditsButton';
 import { loadInvoices, saveInvoice } from './lib/storage';
 import { loadProfile } from './lib/profileStorage';
 
@@ -59,7 +60,8 @@ export default function App(){
           <h1 style={{margin:0}}>{profile.sellerName ? `${profile.sellerName}` : 'WhatsApp Shop Kit'}</h1>
           <div style={{fontSize:13, color:'#666'}}>Invoice generator (MVP)</div>
         </div>
-        <div style={{display:'flex', gap:8}}>
+        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+          <CreditsButton />
           <button className="btn" onClick={() => setShowTemplates(true)}>Templates</button>
           <button className="btn" onClick={() => setShowSettings(true)}>Settings</button>
         </div>

@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { makeInvoicePdf } from '../lib/invoicePdf';
+import { getCustomerId, useCredits } from '../lib/credits';
 
 export default function ParseResult({ parsed, onSave, profile = {}, insertedText = '', clearInsertedText = () => {} }){
   const [invoice, setInvoice] = useState(parsed);
-  const [message, setMessage] = useState(''); // message you will send to buyer
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     setInvoice(parsed);
   }, [parsed]);
 
-  // When Templates sets insertText in App, this prop will change and we populate message.
   useEffect(() => {
     if (insertedText && insertedText.length) {
       setMessage(insertedText);
-      // let parent clear the transient
       clearInsertedText();
     }
   }, [insertedText]);
@@ -28,21 +27,45 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
   }
 
   function handleGenerate(){
-    try {
-      const url = makeInvoicePdf(invoice, profile);
-      const newWindow = window.open(url, '_blank');
-      if (!newWindow) {
-        alert('Please allow popups to view the PDF');
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-    } catch (err) {
-      console.error('PDF generation error:', err);
-      alert('Error generating PDF. Check console for details.');
-    }
+    const url = makeInvoicePdf(invoice, profile);
+    // open in new tab - callers should revoke objectUrl after use if needed
+    window.open(url, '_blank');
   }
 
-  function handleSave(){
-    onSave(invoice);
+  async function handleSave(){
+    // Require 1 credit per invoice (configurable)
+    const required = 1;
+    const custId = getCustomerId();
+    if (!custId) {
+      if (!confirm('No payment account found. You need to buy credits to save invoices. Go to buy credits now?')) {
+        return;
+      }
+      // redirect flow handled by CreditsButton; user should buy click separately.
+      return;
+    }
+
+    try {
+      // attempt to deduct credits server-side (atomic)
+      const resp = await useCredits(custId, required);
+      if (resp && resp.success) {
+        // proceed to save locally
+        onSave(invoice);
+      } else {
+        if (resp && resp.credits !== undefined) {
+          alert(`Insufficient credits (${resp.credits}). Please buy more.`);
+        } else {
+          alert('Could not use credits. Try again.');
+        }
+      }
+    } catch (err) {
+      // err may include {error:'Insufficient credits'}
+      if (err && err.error === 'Insufficient credits') {
+        alert('You do not have enough credits. Please buy credits.');
+      } else {
+        console.error('useCredits failed', err);
+        alert('Failed to use credits. Try again.');
+      }
+    }
   }
 
   async function copyMessageToClipboard() {
@@ -54,7 +77,6 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
       await navigator.clipboard.writeText(message);
       alert('Message copied to clipboard.');
     } catch (e) {
-      // fallback: prompt
       window.prompt('Copy message manually:', message);
     }
   }
@@ -82,7 +104,7 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
       ))}
 
       <div style={{marginTop:10}}>
-        <label>Message to buyer (you can insert a template via the Templates button)</label>
+        <label>Message to buyer</label>
         <textarea value={message} onChange={e=>setMessage(e.target.value)} style={{width:'100%', minHeight:80, padding:8, borderRadius:6, border:'1px solid #e6e9ef'}} />
         <div style={{marginTop:8, display:'flex', gap:8}}>
           <button className="btn" onClick={copyMessageToClipboard}>Copy message</button>
@@ -92,7 +114,7 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
 
       <div className="row" style={{marginTop:10}}>
         <button className="btn" onClick={handleGenerate}>Open PDF</button>
-        <button className="btn secondary" onClick={handleSave}>Save to local list</button>
+        <button className="btn secondary" onClick={handleSave}>Save to local list (uses credit)</button>
       </div>
     </div>
   );
