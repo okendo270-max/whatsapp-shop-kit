@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { makeInvoicePdf } from '../lib/invoicePdf';
-import { getCustomerId, useCredits } from '../lib/credits';
+import { getCustomerId, fetchCredits, useCredits } from '../lib/credits';
 
 export default function ParseResult({ parsed, onSave, profile = {}, insertedText = '', clearInsertedText = () => {} }){
   const [invoice, setInvoice] = useState(parsed);
   const [message, setMessage] = useState('');
+  const [credits, setCredits] = useState(null);
 
   useEffect(() => {
     setInvoice(parsed);
@@ -16,6 +17,19 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
       clearInsertedText();
     }
   }, [insertedText]);
+
+  useEffect(() => {
+    // load current credits for the customer if available
+    const cust = getCustomerId();
+    if (cust) {
+      fetchCredits(cust).then(j => {
+        // fetchCredits returns a number (per your helper)
+        setCredits(typeof j === 'number' ? j : (j && j.credits) || 0);
+      }).catch(() => {
+        setCredits(null);
+      });
+    }
+  }, []);
 
   function updateField(path, value){
     const copy = JSON.parse(JSON.stringify(invoice));
@@ -47,20 +61,24 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
     try {
       // attempt to deduct credits server-side (atomic)
       const resp = await useCredits(custId, required);
-      if (resp && resp.success) {
+      // expected success shape: { clientId, remainingCredits } (see server)
+      if (resp && typeof resp.remainingCredits !== 'undefined') {
+        // update local credits display (optional)
+        setCredits(Number(resp.remainingCredits));
         // proceed to save locally
         onSave(invoice);
       } else {
-        if (resp && resp.credits !== undefined) {
-          alert(`Insufficient credits (${resp.credits}). Please buy more.`);
-        } else {
-          alert('Could not use credits. Try again.');
-        }
+        // unexpected success shape — show generic message
+        alert('Could not confirm credit deduction. Please check your credits and try again.');
       }
     } catch (err) {
-      // err may include {error:'Insufficient credits'}
-      if (err && err.error === 'Insufficient credits') {
+      // err may be an Error with message or an object thrown from fetch
+      // our client helper throws Error with message 'insufficient_credits' for 402
+      const msg = (err && (err.message || err.error || err.status)) || '';
+      if (msg === 'insufficient_credits' || msg === 'Insufficient credits' || (err && err.status === 402)) {
         alert('You do not have enough credits. Please buy credits.');
+      } else if (msg === 'request_timeout') {
+        alert('Request timed out. Try again.');
       } else {
         console.error('useCredits failed', err);
         alert('Failed to use credits. Try again.');
@@ -110,6 +128,14 @@ export default function ParseResult({ parsed, onSave, profile = {}, insertedText
           <button className="btn" onClick={copyMessageToClipboard}>Copy message</button>
           <button className="btn secondary" onClick={() => { navigator.clipboard && navigator.clipboard.writeText(message).then(()=>alert('Message copied')).catch(()=>window.prompt('Copy manually', message)); }}>Copy (alt)</button>
         </div>
+      </div>
+
+      <div style={{marginTop:8}}>
+        {credits !== null ? (
+          <div style={{fontSize:13, color:'#333'}}>Your credits: <strong>{credits}</strong></div>
+        ) : (
+          <div style={{fontSize:13, color:'#666'}}>Credits: unknown</div>
+        )}
       </div>
 
       <div className="row" style={{marginTop:10}}>
