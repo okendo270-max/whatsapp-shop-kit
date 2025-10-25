@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment status</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;padding:24px} .ok{color:green} .warn{color:orange} .err{color:red}</style>
+</head>
+<body>
+  <h1>Payment status</h1>
+  <div id="message">Verifying your payment — please wait...</div>
+
+  <script>
+    (async function(){
+      const qs = new URLSearchParams(location.search);
+      const reference = qs.get('reference')||qs.get('ref')||qs.get('trxref');
+      const el = document.getElementById('message');
+      if (!reference) { el.textContent = 'No payment reference found in the URL.'; return; }
+
+      try {
+        const res = await fetch('/api/verify-paystack-payment?reference=' + encodeURIComponent(reference));
+        const j = await res.json();
+        if (j.ok && j.verified) {
+          el.innerHTML = '<div class="ok">Payment verified. Your credits have been updated.</div>';
+        } else if (j.ok && !j.verified) {
+          el.innerHTML = '<div class="warn">Payment not verified yet. Try again later.</div><pre>' + JSON.stringify(j.paystack||j, null, 2) + '</pre>';
+        } else {
+          el.innerHTML = '<div class="err">Verify endpoint returned an error.</div><pre>' + JSON.stringify(j, null, 2) + '</pre>';
+        }
+      } catch (err) {
+        el.innerHTML = '<div class="err">Verify request failed. Try again later.</div><pre>' + String(err) + '</pre>';
+      }
+    })();
+  </script>
+</body>
+</html>
