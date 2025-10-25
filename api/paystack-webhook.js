@@ -132,12 +132,12 @@ export default async function handler(req, res) {
       if (!o1err && o1) order = o1;
     }
 
-    // 2) Match orders.order_id === reference (in case you stored reference there)
+    // 2) Match orders.order.order_id === reference (in case you stored reference there)
     if (!order && reference) {
       const { data: o2, error: o2err } = await supabaseAdmin
         .from('orders')
         .select('*')
-        .eq('order_id', reference)
+        .eq('order.order_id', reference)
         .limit(1)
         .maybeSingle();
       if (!o2err && o2) order = o2;
@@ -177,7 +177,7 @@ export default async function handler(req, res) {
     // If order already processed, skip crediting again
     const alreadyProcessed = order.webhook_processed === true || order.status === 'completed';
     if (alreadyProcessed) {
-      console.log('Order already marked processed; skipping credit update. order:', order.id ?? order.order_id);
+      console.log('Order already marked processed; skipping credit update. order:', order.order_id ?? order.order.order_id);
       res.status(200).json({ ok: true, note: 'order-already-processed' });
       return;
     }
@@ -194,7 +194,7 @@ export default async function handler(req, res) {
     const { error: updErr } = await supabaseAdmin
       .from('orders')
       .update(updates)
-      .eq('id', order.id);
+      .eq('order.order_id', order.order.order_id);
 
     if (updErr) {
       console.error('Failed to update order row:', updErr);
@@ -207,13 +207,13 @@ export default async function handler(req, res) {
     const creditsToAdd = order.credits ?? packCredits ?? (data?.metadata?.credits ? Number(data.metadata.credits) : null);
 
     if (!order.client_id) {
-      console.warn('Order has no client_id; cannot credit customer. Order id:', order.id);
+      console.warn('Order has no client_id; cannot credit customer. Order id:', order.order_id);
       res.status(200).json({ ok: true, note: 'no-client-id' });
       return;
     }
 
     if (!creditsToAdd) {
-      console.warn('No credits amount found on order or metadata; skipping credit update. order:', order.id);
+      console.warn('No credits amount found on order or metadata; skipping credit update. order:', order.order_id);
       res.status(200).json({ ok: true, note: 'no-credits' });
       return;
     }
@@ -272,7 +272,7 @@ export default async function handler(req, res) {
     } else {
       // We updated the order status but could not credit; still return 200 to avoid retries,
       // but create an admin-visible log or alert in DB if you want.
-      console.warn('Order processed but credits not applied. Order id:', order.id);
+      console.warn('Order processed but credits not applied. Order id:', order.order_id);
       res.status(200).json({ ok: true, note: 'processed-no-credit' });
       return;
     }
