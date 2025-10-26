@@ -43,8 +43,9 @@ export function setCustomerId(id) {
 }
 
 // Create checkout session (Paystack or other provider)
-export async function createCheckoutSession({ clientId, customerId }) {
-  const payload = { clientId, customerId };
+// Now accepts an optional packId so server knows which pack to charge for.
+export async function createCheckoutSession({ clientId, customerId, packId = null }) {
+  const payload = { clientId, customerId, packId };
   const res = await fetchWithTimeout('/api/create-checkout-session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

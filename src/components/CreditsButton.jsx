@@ -1,4 +1,3 @@
-// src/components/CreditsButton.jsx
 import React, { useEffect, useState, useRef } from 'react';
 import {
   getClientId,
@@ -35,10 +34,7 @@ export default function CreditsButton() {
   }
 
   useEffect(() => {
-    // initial refresh
     (async () => { await refresh(); })();
-
-    // refresh every 20 seconds while component mounted
     const id = setInterval(refresh, 20000);
     return () => {
       clearInterval(id);
@@ -49,17 +45,15 @@ export default function CreditsButton() {
     };
   }, []);
 
-  // Poll helper for mpesa flow: poll refresh() until credits increase or timeout
   function startMpesaPoll(prevCredits) {
-    // clear existing poll if any
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
 
     const start = Date.now();
-    const timeoutMs = 2 * 60 * 1000; // 2 minutes max polling
-    const intervalMs = 5000; // poll every 5s
+    const timeoutMs = 2 * 60 * 1000;
+    const intervalMs = 5000;
 
     pollRef.current = setInterval(async () => {
       try {
@@ -88,17 +82,17 @@ export default function CreditsButton() {
       const customerId = getCustomerId();
       const prevCredits = credits;
 
-      // Attempt to create a checkout session on the server
-      const res = await createCheckoutSession({ clientId, customerId });
+      // default pack id to 1 for demo; change if you present multiple packs
+      const packId = 1;
 
-      // If server returns/updates a customer id, persist it
+      // Attempt to create a checkout session on the server
+      const res = await createCheckoutSession({ clientId, customerId, packId });
+
       if (res && (res.customerId || res.customer_id)) {
         setCustomerId(res.customerId || res.customer_id);
       }
 
-      // Prefer explicit 'flow' field from server
       if (res && res.flow === 'card-paystack') {
-        // card flow: redirect to Paystack checkout (different possible shapes)
         const url =
           (res.paystack && (res.paystack.data && res.paystack.data.authorization_url)) ||
           res.paystack?.authorization_url ||
@@ -108,7 +102,6 @@ export default function CreditsButton() {
           res.checkout_url;
 
         if (url) {
-          // use assign so user can go back
           window.location.assign(url);
           return;
         } else {
@@ -117,16 +110,11 @@ export default function CreditsButton() {
       }
 
       if (res && res.flow === 'mpesa-paystack') {
-        // mpesa flow started server-side. Inform user and poll for credits.
-        // Res may include orderId and paystack response for auditing.
         alert('M-PESA prompt sent to the phone number provided. Approve the prompt to complete payment. We will update your credits automatically once payment is confirmed.');
-
-        // start polling for credits increase
         startMpesaPoll(prevCredits);
         return;
       }
 
-      // Fallback: handle other common shapes (older code)
       const redirectUrl = res && (res.url || res.authorization_url || res.checkoutUrl || res.checkout_url);
       if (redirectUrl) {
         window.location.assign(redirectUrl);
@@ -138,7 +126,6 @@ export default function CreditsButton() {
         return;
       }
 
-      // Unexpected response
       console.error('Unexpected response from payment server:', res);
       alert('Unexpected response from payment server. Check console for details.');
     } catch (e) {
