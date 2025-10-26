@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -6,21 +5,14 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 function normalizePhone(raw) {
   if (!raw) return null;
   let s = String(raw).trim();
-  // remove non-digits and leading plus
   s = s.replace(/[^\d]/g, '');
-  // if starts with 0 -> replace with 254
   if (s.length === 10 && s.startsWith('0')) s = '254' + s.slice(1);
-  // if starts with 9-digit local without leading zero but 9-digit (unlikely), handle conservatively
   if (s.length === 9) s = '254' + s;
-  // if it already starts with 254 leave as is
   if (s.startsWith('254')) return '+' + s;
-  // if it looks like international already, prepend +
   return '+' + s;
 }
 
 function emailFromPhone(phone) {
-  // deterministic, not random — safe fallback when customer has no email
-  // example: +254700000001 -> 254700000001@noemail.paystack
   if (!phone) return null;
   const digits = phone.replace(/[^\d]/g, '');
   return `${digits}@noemail.paystack`;
@@ -60,7 +52,6 @@ export default async function handler(req, res) {
     const priceFloat = Number(pack.price);
     if (Number.isNaN(priceFloat)) return res.status(400).json({ error: 'invalid pack.price' });
 
-    // Paystack requires amount in the smallest currency subunit (kobo for KES)
     const amountSubunit = Math.round(priceFloat * 100);
 
     // Create an order row first (status pending)
@@ -90,7 +81,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'phone required for mpesa payments' });
       }
 
-      // Build Paystack Charge payload
       const chargeBody = {
         email: customerEmail,
         amount: amountSubunit,
@@ -105,7 +95,7 @@ export default async function handler(req, res) {
       const r = await fetch('https://api.paystack.co/charge', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          Authorization: \`Bearer \${process.env.PAYSTACK_SECRET_KEY}\`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(chargeBody)
@@ -113,7 +103,6 @@ export default async function handler(req, res) {
 
       const result = await r.json();
 
-      // store last response on the order for traceability (best effort)
       await supabase
         .from('orders')
         .update({ paystack_response: result, updated_at: new Date().toISOString() })
@@ -122,27 +111,26 @@ export default async function handler(req, res) {
       if (!result) return res.status(500).json({ error: 'no response from paystack' });
       if (result.status === false) return res.status(400).json({ error: 'paystack_error', detail: result });
 
-      // return the charge response to the client
       return res.status(200).json({ ok: true, flow: 'mpesa-paystack', order, paystack: result });
     }
 
-    // Card flow: initialize transaction (redirect) - keep previous transaction init behaviour
+    // Card flow
     if (!customerEmail) return res.status(400).json({ error: 'Missing email for card payments' });
 
-    const reference = `paystack_${Date.now()}_${clientId}`;
+    const reference = \`paystack_\${Date.now()}_\${clientId}\`;
     const initPayload = {
       email: customerEmail,
       amount: amountSubunit,
       currency: pack.currency || 'KES',
       reference,
-      callback_url: `${process.env.BASE_URL || ''}/paystack-return.html`,
+      callback_url: \`\${process.env.BASE_URL || ''}/paystack-return.html\`,
       metadata: { clientId, packId, orderId, provider: pack.provider || 'internal' }
     };
 
     const r2 = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        Authorization: \`Bearer \${process.env.PAYSTACK_SECRET_KEY}\`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(initPayload)
@@ -150,7 +138,6 @@ export default async function handler(req, res) {
 
     const tx = await r2.json();
 
-    // store paystack init response
     await supabase
       .from('orders')
       .update({ paystack_response: tx, paystack_reference: reference, updated_at: new Date().toISOString() })
