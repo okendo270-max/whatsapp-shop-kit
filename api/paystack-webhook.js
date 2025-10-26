@@ -45,6 +45,19 @@ export default async function handler(req, res) {
     const reference = data.reference || data.tx_ref || data.reference;
     const amount = data.amount || data.requested_amount || null;
 
+    // --- Log the webhook to payment_events for auditing (best-effort) ---
+    try {
+      await supabase.from('payment_events').insert([{
+        event_type: eventType || 'unknown',
+        reference: reference || null,
+        paystack_payload: data,
+        received_at: new Date().toISOString()
+      }]);
+    } catch (logErr) {
+      console.warn('paystack-webhook: failed to log event to payment_events', String(logErr));
+      // continue even if logging fails
+    }
+
     const orderId = metadata.orderId || metadata.order_id || null;
     let order = null;
 
