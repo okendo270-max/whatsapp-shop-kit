@@ -44,8 +44,8 @@ export function setCustomerId(id) {
 
 // Create checkout session (Paystack or other provider)
 // Now calls the Paystack endpoint directly to avoid proxy issues.
-export async function createCheckoutSession({ clientId, customerId, packId = null }) {
-  const payload = { clientId, customerId, packId };
+export async function createCheckoutSession({ clientId, customerId, packId = null, email = null, phone = null, paymentMethod = 'card' }) {
+  const payload = { clientId, customerId, packId, email, phone, paymentMethod };
   // Direct to the Paystack handler which is working
   const res = await fetchWithTimeout('/api/create-paystack-payment', {
     method: 'POST',

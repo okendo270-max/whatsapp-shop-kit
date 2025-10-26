@@ -1,0 +1,1 @@
+{"ok":true,"flow":"card-paystack","orderId":"order_1761475732773_test-client-1","paystack":{"status":true,"message":"Authorization URL created","data":{"authorization_url":"https://checkout.paystack.com/01get0af483ebl7","access_code":"01get0af483ebl7","reference":"paystack_1761475732913_test-client-1"}}}

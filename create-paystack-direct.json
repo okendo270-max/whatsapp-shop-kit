@@ -1,0 +1,1 @@
+{"ok":true,"flow":"card-paystack","orderId":"order_1761474559008_test-client-1","paystack":{"status":true,"message":"Authorization URL created","data":{"authorization_url":"https://checkout.paystack.com/rvo913ma5fspm74","access_code":"rvo913ma5fspm74","reference":"paystack_1761474559177_test-client-1"}}}
