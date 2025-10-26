@@ -52,7 +52,7 @@ export default function CreditsButton() {
     }
 
     const start = Date.now();
-    const timeoutMs = 2 * 60 * 1000;
+    const timeoutMs = 2 * 60 * 1000; // 2 minutes
     const intervalMs = 5000;
 
     pollRef.current = setInterval(async () => {
@@ -90,14 +90,6 @@ export default function CreditsButton() {
       const email = savedEmail || 'arimisbaby@gmail.com';
 
       const res = await createCheckoutSession({ clientId, customerId, packId, email, phone, paymentMethod });
-
-      // DEBUG: always surface server response so we can see why UI shows a failure.
-      console.log('createCheckoutSession response (client):', res);
-      if (!res || (res.ok !== true && !res.flow)) {
-        // Alert the raw server response so you can paste it here
-        alert('Payment start returned unexpected response: ' + JSON.stringify(res));
-        throw new Error('unexpected_response');
-      }
 
       if (res && (res.customerId || res.customer_id)) {
         setCustomerId(res.customerId || res.customer_id);
