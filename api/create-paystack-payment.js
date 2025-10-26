@@ -14,7 +14,8 @@ function normalizePhone(raw) {
 function emailFromPhone(phone) {
   if (!phone) return null;
   const digits = phone.replace(/[^\d]/g, '');
-  return `${digits}@noemail.paystack`;
+  // use example.com for a valid test email format
+  return `${digits}@example.com`;
 }
 
 export default async function handler(req, res) {
@@ -24,7 +25,6 @@ export default async function handler(req, res) {
     const { clientId, packId, email: bodyEmail, phone: bodyPhone, paymentMethod = 'card' } = req.body || {};
     if (!clientId || !packId) return res.status(400).json({ error: 'clientId and packId required' });
 
-    // fetch pack
     const { data: pack, error: packErr } = await supabase
       .from('credit_packs')
       .select('id, price, currency, credits, provider')
@@ -33,7 +33,6 @@ export default async function handler(req, res) {
     if (packErr) return res.status(500).json({ error: 'fetch_pack_error', detail: String(packErr) });
     if (!pack) return res.status(404).json({ error: 'pack not found' });
 
-    // fetch customer: select only existing columns
     const { data: customer, error: custErr } = await supabase
       .from('customers')
       .select('client_id, phone, mpesa_phone, paystack_customer_id')
@@ -41,7 +40,6 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (custErr) return res.status(500).json({ error: 'fetch_customer_error', detail: String(custErr) });
 
-    // use bodyPhone first, then mpesa_phone, then phone from DB
     const customerPhone = bodyPhone || (customer && (customer.mpesa_phone || customer.phone)) || null;
     const normalizedPhone = normalizePhone(customerPhone);
     const customerEmail = bodyEmail || (customer && customer.email) || emailFromPhone(normalizedPhone);
@@ -50,7 +48,6 @@ export default async function handler(req, res) {
     if (Number.isNaN(priceFloat)) return res.status(400).json({ error: 'invalid pack.price' });
     const amountSubunit = Math.round(priceFloat * 100);
 
-    // create pending order
     const orderId = `order_${Date.now()}_${clientId}`;
     await supabase.from('orders').insert([{
       order_id: orderId,
@@ -63,7 +60,6 @@ export default async function handler(req, res) {
       created_at: new Date().toISOString()
     }]);
 
-    // mpesa via Paystack Charge API
     if (paymentMethod === 'mpesa') {
       if (!normalizedPhone) return res.status(400).json({ error: 'phone required for mpesa payments' });
 
@@ -92,7 +88,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, flow: 'mpesa-paystack', orderId, paystack: result });
     }
 
-    // card flow
     if (!customerEmail) return res.status(400).json({ error: 'Missing email for card payments' });
 
     const reference = `paystack_${Date.now()}_${clientId}`;
