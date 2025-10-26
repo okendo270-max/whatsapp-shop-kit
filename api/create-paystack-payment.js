@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     if (packErr) return res.status(500).json({ error: 'fetch_pack_error', detail: String(packErr) });
     if (!pack) return res.status(404).json({ error: 'pack not found' });
 
-    // fetch customer: select only existing columns (no 'email' column)
+    // fetch customer: select only existing columns
     const { data: customer, error: custErr } = await supabase
       .from('customers')
       .select('client_id, phone, mpesa_phone, paystack_customer_id')
@@ -41,7 +41,8 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (custErr) return res.status(500).json({ error: 'fetch_customer_error', detail: String(custErr) });
 
-    const customerPhone = phone || (customer && (customer.mpesa_phone || customer.phone)) || null;
+    // use bodyPhone first, then mpesa_phone, then phone from DB
+    const customerPhone = bodyPhone || (customer && (customer.mpesa_phone || customer.phone)) || null;
     const normalizedPhone = normalizePhone(customerPhone);
     const customerEmail = bodyEmail || (customer && customer.email) || emailFromPhone(normalizedPhone);
 
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
     // mpesa via Paystack Charge API
     if (paymentMethod === 'mpesa') {
       if (!normalizedPhone) return res.status(400).json({ error: 'phone required for mpesa payments' });
+
       const chargeBody = {
         email: customerEmail,
         amount: amountSubunit,
@@ -72,15 +74,19 @@ export default async function handler(req, res) {
         metadata: { clientId, packId, orderId, provider: pack.provider || 'internal' },
         mobile_money: { provider: 'mpesa', phone: normalizedPhone }
       };
+
       const r = await fetch('https://api.paystack.co/charge', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(chargeBody)
       });
+
       const text = await r.text();
       let result;
       try { result = JSON.parse(text); } catch (e) { result = { raw: text }; }
+
       await supabase.from('orders').update({ paystack_response: result, updated_at: new Date().toISOString() }).eq('order_id', orderId);
+
       if (!result) return res.status(500).json({ error: 'no response from paystack' });
       if (result.status === false) return res.status(400).json({ error: 'paystack_error', detail: result });
       return res.status(200).json({ ok: true, flow: 'mpesa-paystack', orderId, paystack: result });
@@ -88,6 +94,7 @@ export default async function handler(req, res) {
 
     // card flow
     if (!customerEmail) return res.status(400).json({ error: 'Missing email for card payments' });
+
     const reference = `paystack_${Date.now()}_${clientId}`;
     const initPayload = {
       email: customerEmail,
@@ -97,15 +104,19 @@ export default async function handler(req, res) {
       callback_url: `${process.env.BASE_URL || ''}/paystack-return.html`,
       metadata: { clientId, packId, orderId, provider: pack.provider || 'internal' }
     };
+
     const r2 = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(initPayload)
     });
+
     const txText = await r2.text();
     let tx;
     try { tx = JSON.parse(txText); } catch (e) { tx = { raw: txText }; }
+
     await supabase.from('orders').update({ paystack_response: tx, paystack_reference: reference, updated_at: new Date().toISOString() }).eq('order_id', orderId);
+
     if (!tx || tx.status === false) return res.status(500).json({ error: 'paystack_init_failed', detail: tx });
     return res.status(200).json({ ok: true, flow: 'card-paystack', orderId, paystack: tx });
   } catch (err) {
