@@ -41,8 +41,8 @@ export default async function handler(req, res) {
     const data = event.data || event;
     const metadata = data.metadata || {};
     const clientId = metadata.clientId || metadata.client_id || null;
-    const packId = metadata.packId || metadata.pack_id || null;
-    const reference = data.reference || data.tx_ref || data.reference;
+    const packId = metadata.packId || metadata.pack_id || null; // if present, this is a credit purchase
+    const reference = data.reference || data.tx_ref || null;
     const amount = data.amount || data.requested_amount || null;
 
     // --- Log the webhook to payment_events for auditing (best-effort) ---
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
       await supabase.from('payment_events').insert([{
         event_type: eventType || 'unknown',
         reference: reference || null,
-        paystack_payload: data,
+        raw_payload: data,
         received_at: new Date().toISOString()
       }]);
     } catch (logErr) {
@@ -58,90 +58,71 @@ export default async function handler(req, res) {
       // continue even if logging fails
     }
 
-    const orderId = metadata.orderId || metadata.order_id || null;
-    let order = null;
-
-    if (orderId) {
-      const { data: o, error: oErr } = await supabase.from('orders').select('*').eq('order_id', orderId).maybeSingle();
-      if (!oErr) order = o;
-    }
-    if (!order && reference) {
-      const { data: o2, error: oErr2 } = await supabase.from('orders').select('*').eq('paystack_reference', reference).maybeSingle();
-      if (!oErr2) order = o2;
-    }
-    if (!order && clientId) {
-      const { data: o3, error: oErr3 } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('client_id', clientId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!oErr3) order = o3;
-    }
-
-    const updatePayload = {
-      status: 'paid',
-      webhook_processed: true,
-      paystack_reference: reference,
-      paystack_payload: data,
-      processed_at: new Date().toISOString()
-    };
-
-    if (order && order.order_id) {
-      await supabase.from('orders').update(updatePayload).eq('order_id', order.order_id);
-    } else {
-      const newOrder = {
-        order_id: orderId || `paystack_${reference}_${Date.now()}`,
-        client_id: clientId || 'unknown',
-        pack_id: packId || null,
-        amount: amount || null,
-        currency: data.currency || 'KES',
-        payment_method: data.channel || 'card',
-        status: 'paid',
-        paystack_reference: reference,
-        paystack_payload: data,
-        webhook_processed: true,
-        processed_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
-      };
-      const { error: insErr } = await supabase.from('orders').insert([newOrder]);
-      if (insErr) console.warn('paystack-webhook: failed to insert new order', String(insErr));
-    }
-
-    // crediting (best-effort)
-    let creditsToAdd = null;
+    // If this webhook corresponds to a credit pack purchase, handle it in the credit_purchases table
     if (packId) {
-      const { data: pack, error: packErr } = await supabase.from('credit_packs').select('credits').eq('id', packId).maybeSingle();
-      if (!packErr && pack) creditsToAdd = pack.credits;
-    }
+      // 1) insert into credit_purchases (best-effort). If duplicate insert fails, ignore and continue.
+      const purchase = {
+        client_id: clientId || 'unknown',
+        pack_id: String(packId),
+        amount: amount ? (Number(amount) / 100) : null, // store in main currency units
+        currency: data.currency || 'KES',
+        paystack_reference: reference || null,
+        paystack_payload: data,
+        status: (data.status || 'paid'),
+        created_at: new Date().toISOString(),
+        processed_at: new Date().toISOString()
+      };
 
-    let credited = false;
-    if (clientId && creditsToAdd != null) {
       try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('increment_customer_credits', { client_id: clientId, credits: creditsToAdd });
-        if (!rpcErr) credited = true;
-      } catch (e) {
-        console.warn('paystack-webhook: rpc call failed', String(e));
-      }
-    }
-
-    if (!credited && clientId && creditsToAdd != null) {
-      try {
-        // safe read-modify-write fallback
-        const { data: cust, error: custErr } = await supabase.from('customers').select('credits').eq('client_id', clientId).maybeSingle();
-        if (!custErr && cust) {
-          const newCredits = (Number(cust.credits) || 0) + Number(creditsToAdd);
-          await supabase.from('customers').update({ credits: newCredits, updated_at: new Date().toISOString() }).eq('client_id', clientId);
-          credited = true;
+        const { error: insErr } = await supabase.from('credit_purchases').insert([purchase]);
+        if (insErr) {
+          // ignore duplicate/constraint errors but log them
+          console.warn('paystack-webhook: credit_purchases insert error (ignored)', String(insErr));
         }
       } catch (e) {
-        console.warn('paystack-webhook: fallback credit update failed', String(e));
+        console.warn('paystack-webhook: credit_purchases insert threw', String(e));
       }
+
+      // 2) determine credits in the pack
+      let creditsToAdd = null;
+      try {
+        const { data: pack, error: packErr } = await supabase.from('credit_packs').select('credits').eq('id', packId).maybeSingle();
+        if (!packErr && pack) creditsToAdd = pack.credits;
+      } catch (e) {
+        console.warn('paystack-webhook: failed to fetch credit_packs', String(e));
+      }
+
+      // 3) credit the customer's account (try RPC, fallback to read-modify-write)
+      let credited = false;
+      if (clientId && creditsToAdd != null) {
+        try {
+          const { data: rpcRes, error: rpcErr } = await supabase.rpc('increment_customer_credits', { client_id: clientId, credits: creditsToAdd });
+          if (!rpcErr) credited = true;
+        } catch (e) {
+          console.warn('paystack-webhook: rpc call failed', String(e));
+        }
+      }
+
+      if (!credited && clientId && creditsToAdd != null) {
+        try {
+          const { data: cust, error: custErr } = await supabase.from('customers').select('credits').eq('client_id', clientId).maybeSingle();
+          if (!custErr && cust) {
+            const newCredits = (Number(cust.credits) || 0) + Number(creditsToAdd);
+            await supabase.from('customers').update({ credits: newCredits, updated_at: new Date().toISOString() }).eq('client_id', clientId);
+            credited = true;
+          }
+        } catch (e) {
+          console.warn('paystack-webhook: fallback credit update failed', String(e));
+        }
+      }
+
+      return res.status(200).json({ ok: true, message: 'credit processed', purchase: purchase, credited });
     }
 
-    return res.status(200).json({ ok: true, message: 'processed', orderId: order ? order.order_id : null, credited });
+    // Non-pack event: we intentionally do not touch invoices/orders.
+    // Already logged to payment_events above; return an "ignored" response for non-credit events.
+    return res.status(200).json({ ok: true, message: 'ignored non-credit event' });
+
   } catch (err) {
     console.error('paystack-webhook top-level error', err && err.stack ? err.stack : String(err));
     return res.status(500).json({ ok: false, error: String(err) });
