@@ -1,3 +1,4 @@
+import { recordCreditSpend } from '../lib/credit-audit.js';
 // api/use-credit.js
 import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
@@ -18,6 +19,14 @@ export default async function handler(req, res) {
     const newCredits = current - amount;
     const newMeta = Object.assign({}, cust.metadata || {}, { credits: String(newCredits) });
     await stripe.customers.update(customerId, { metadata: newMeta });
+  // Audit log (best-effort) - record the credits spent for this invoice
+  try {
+    const auditClientId = (typeof clientId !== "undefined") ? clientId : (req && req.body && (req.body.clientId || req.body.client_id || req.body.customerId || req.body.customer_id || null));
+    const creditsUsed = (typeof amount !== "undefined") ? Number(amount) : Number((req && req.body && (req.body.amount || req.body.credits)) || 1);
+    await recordCreditSpend(null, auditClientId, creditsUsed, "invoice_create");
+  } catch (err) {
+    console.warn("recordCreditSpend failed", String(err));
+  }
     return res.json({ success: true, credits: newCredits });
   } catch (err) {
     console.error('use-credit error', err);
