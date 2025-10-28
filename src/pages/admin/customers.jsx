@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { fetchCustomers, blockUser, adjustCredits } from '../lib/adminApi';
+import { useState, useEffect } from "react";
+import { fetchCustomers, blockUser, adjustCredits } from "../../lib/adminApi";
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
@@ -16,7 +16,7 @@ export default function CustomersPage() {
       setCustomers(res.data);
       setTotal(res.total);
     } catch (err) {
-      console.error('Failed to load customers:', err);
+      console.error("Failed to load customers:", err);
     } finally {
       setLoading(false);
     }
@@ -27,23 +27,26 @@ export default function CustomersPage() {
   }, [page]);
 
   const handleBlockToggle = async (clientId, blocked) => {
-    const reason = prompt('Reason for change:') || 'No reason';
+    const reason = prompt("Reason for change:") || "No reason";
     try {
-      await blockUser(clientId, !blocked, reason, 'admin'); // changedBy placeholder
+      await blockUser(clientId, !blocked, reason, "admin"); // changedBy placeholder
       loadCustomers();
     } catch (err) {
-      console.error('Failed to toggle block:', err);
+      console.error("Failed to toggle block:", err);
     }
   };
 
   const handleAdjustCredits = async (clientId) => {
-    const amount = parseInt(prompt('Credits to add/subtract (use negative for subtract):'), 10);
-    if (isNaN(amount)) return alert('Invalid number');
+    const amount = parseInt(
+      prompt("Credits to add/subtract (use negative for subtract):"),
+      10,
+    );
+    if (isNaN(amount)) return alert("Invalid number");
     try {
-      await adjustCredits(clientId, amount, 'admin adjustment'); // changedBy placeholder
+      await adjustCredits(clientId, amount, "admin adjustment"); // changedBy placeholder
       loadCustomers();
     } catch (err) {
-      console.error('Failed to adjust credits:', err);
+      console.error("Failed to adjust credits:", err);
     }
   };
 
@@ -55,7 +58,11 @@ export default function CustomersPage() {
       {loading ? (
         <p>Loading...</p>
       ) : (
-        <table border="1" cellPadding="8" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table
+          border="1"
+          cellPadding="8"
+          style={{ width: "100%", borderCollapse: "collapse" }}
+        >
           <thead>
             <tr>
               <th>Client ID</th>
@@ -71,12 +78,16 @@ export default function CustomersPage() {
                 <td>{c.client_id}</td>
                 <td>{c.phone}</td>
                 <td>{c.credits}</td>
-                <td>{c.blocked ? 'Yes' : 'No'}</td>
+                <td>{c.blocked ? "Yes" : "No"}</td>
                 <td>
-                  <button onClick={() => handleBlockToggle(c.client_id, c.blocked)}>
-                    {c.blocked ? 'Unblock' : 'Block'}
-                  </button>{' '}
-                  <button onClick={() => handleAdjustCredits(c.client_id)}>Adjust Credits</button>
+                  <button
+                    onClick={() => handleBlockToggle(c.client_id, c.blocked)}
+                  >
+                    {c.blocked ? "Unblock" : "Block"}
+                  </button>{" "}
+                  <button onClick={() => handleAdjustCredits(c.client_id)}>
+                    Adjust Credits
+                  </button>
                 </td>
               </tr>
             ))}
@@ -87,7 +98,7 @@ export default function CustomersPage() {
         <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
           Prev
         </button>
-        <span style={{ margin: '0 10px' }}>
+        <span style={{ margin: "0 10px" }}>
           Page {page} / {totalPages || 1}
         </span>
         <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
