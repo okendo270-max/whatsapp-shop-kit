@@ -29,7 +29,7 @@ export default function CustomersPage() {
   const handleBlockToggle = async (clientId, blocked) => {
     const reason = prompt("Reason for change:") || "No reason";
     try {
-      await blockUser(clientId, !blocked, reason, "admin"); // changedBy placeholder
+      await blockUser(clientId, !blocked, reason, "admin");
       loadCustomers();
     } catch (err) {
       console.error("Failed to toggle block:", err);
@@ -39,11 +39,11 @@ export default function CustomersPage() {
   const handleAdjustCredits = async (clientId) => {
     const amount = parseInt(
       prompt("Credits to add/subtract (use negative for subtract):"),
-      10,
+      10
     );
     if (isNaN(amount)) return alert("Invalid number");
     try {
-      await adjustCredits(clientId, amount, "admin adjustment"); // changedBy placeholder
+      await adjustCredits(clientId, amount, "admin adjustment");
       loadCustomers();
     } catch (err) {
       console.error("Failed to adjust credits:", err);
@@ -80,9 +80,7 @@ export default function CustomersPage() {
                 <td>{c.credits}</td>
                 <td>{c.blocked ? "Yes" : "No"}</td>
                 <td>
-                  <button
-                    onClick={() => handleBlockToggle(c.client_id, c.blocked)}
-                  >
+                  <button onClick={() => handleBlockToggle(c.client_id, c.blocked)}>
                     {c.blocked ? "Unblock" : "Block"}
                   </button>{" "}
                   <button onClick={() => handleAdjustCredits(c.client_id)}>
