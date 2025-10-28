@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchCustomers, blockUser, adjustCredits } from "../../lib/adminApi";
+import { fetchCustomers, blockUser, adjustCredits } from "../../lib/adminApi.js";
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
